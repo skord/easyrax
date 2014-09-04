@@ -1,0 +1,13 @@
+- name: Generate Rackspace Credentials
+  hosts: localhost
+  user: "{{ ansible_env.USER }}"
+  connection: local
+  vars_prompt:
+    rackspace_username: "What is your rackspace username?"
+    rackspace_api_key: "What is your rackspace API key?"
+    app_domain_name: "What domain are you putting on rackspace?"
+    app_domain_email: "What is the admin email for your domain?"
+    app_identifier: "What's a string of characters with no spaces to id your app by?"
+    preferred_datacenter: "What's your preferred datacenter? (IAD or DFW, case sensative)"
+  roles:
+    - role: rackspace_setup

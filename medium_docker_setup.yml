@@ -1,0 +1,76 @@
+- name: Build Stuff
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Load Balancer create request
+      local_action:
+        module: rax_clb
+        credentials: "{{ ansible_env.HOME }}/.rackspace_cloud_credentials"
+        name: "{{ app_identifier }}-http-lb"
+        port: 80
+        protocol: HTTP
+        type: PUBLIC
+        timeout: 30
+        region: "{{ preferred_datacenter }}"
+        wait: yes
+        state: present
+        meta:
+          app: "{{ app_identifier }}"
+      register: my_http_lb
+    - name: Create 1024Mb Performance Instances
+      local_action:
+        module: rax
+        credentials: "{{ ansible_env.HOME }}/.rackspace_cloud_credentials"
+        name: "www-%03d.{{ app_domain_name }}"
+        flavor: performance1-1
+        image: Ubuntu 14.04 LTS (Trusty Tahr)
+        wait: yes
+        state: present
+        networks:
+          - private
+          - public
+        key_name: easyrax_generated_keypair
+        region: "{{ preferred_datacenter }}"
+        count: 3
+        exact_count: yes
+        group: "{{ app_identifier }}-www"
+      register: rax
+    - name: Add new instances to host group
+      local_action: add_host hostname={{ item.accessIPv4 }} groupname=launched
+      with_items: rax.instances
+    - name: Wait for instances to be available
+      local_action: wait_for host={{ item.accessIPv4 }} port=22 delay=60 timeout=600 state=started
+      with_items: rax.instances
+    - name: Associate domain with LB
+      local_action:
+        module: rax_dns_record
+        credentials: "{{ ansible_env.HOME }}/.rackspace_cloud_credentials"
+        domain: "{{ app_domain_name }}"
+        name: "{{ app_domain_name }}"
+        type: A
+        data: "{{ item.address }}"
+      with_items: my_http_lb.balancer.virtual_ips
+
+
+
+- name: Install Docker on Launched Instances
+  user: root
+  hosts: launched
+  roles:
+    - role: docker_ubuntu
+
+
+- name: Attach Server to Load Balancer
+  hosts: localhost
+  connection: local
+  serial: 1
+  tasks:
+    - name: Attach nodes to LB
+      local_action:
+        module: rax_clb_nodes
+        credentials: "{{ ansible_env.HOME }}/.rackspace_cloud_credentials"
+        load_balancer_id: "{{ my_http_lb.balancer.id }}"
+        address: "{{ item.accessIPv4 }}"
+        port: 80
+        region: "{{ preferred_datacenter }}"
+      with_items: rax.instances

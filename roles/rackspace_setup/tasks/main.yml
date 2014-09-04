@@ -1,0 +1,42 @@
+- name: Write out credential file
+  template: src=rackspace_cloud_credentials dest={{ ansible_env.HOME }}/.rackspace_cloud_credentials
+- name: Create SSH Keys
+  command:  "ssh-keygen -t rsa -N '' -f {{ ansible_env.HOME }}/.ssh/rackspace_cloud_credential"
+  args:
+    creates: "{{ ansible_env.HOME }}/.ssh/rackspace_cloud_credential"
+- name: Add new key to agent
+  command: "ssh-add {{ ansible_env.HOME }}/.ssh/rackspace_cloud_credential"
+  args:
+    creates: "{{ ansible_env.HOME }}/.ssh/rackspace_cloud_credential"
+- name: Add keypair to DFW and IAD
+  rax_keypair:
+    credentials: "{{ ansible_env.HOME }}/.rackspace_cloud_credentials"
+    name: easyrax_generated_keypair
+    public_key: "{{ lookup('file', ansible_env.HOME + '/.ssh/rackspace_cloud_credential.pub') }}"
+    region: "{{ item }}"
+  with_items:
+    - DFW
+    - IAD
+- name: Create Domain
+  rax_dns:
+    credentials: "{{ ansible_env.HOME }}/.rackspace_cloud_credentials"
+    name: "{{ app_domain_name }}"
+    email: "{{ app_domain_email }}"
+  register: rax_dns
+- name: Record Domain
+  lineinfile:
+    dest: "{{ ansible_env.PWD }}/group_vars/all"
+    regexp: '^app_domain_name'
+    line: "app_domain_name: {{ app_domain_name }}"
+- name: Record App ID
+  lineinfile:
+    dest: "{{ ansible_env.PWD }}/group_vars/all"
+    regexp: '^app_identifier'
+    line: "app_identifier: {{ app_identifier }}"
+- name: Record preferred data center
+  lineinfile:
+    dest: "{{ ansible_env.PWD }}/group_vars/all"
+    regexp: '^preferred_datacenter'
+    line: "preferred_datacenter: {{ preferred_datacenter }}"
+
+
